@@ -1,21 +1,31 @@
 import "./App.css";
 import io from "socket.io-client";
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import SignUp from "./components/SignUp";
 import SignIn from "./components/SignIn";
+import { API_URL } from "./config";
 
-const socket = io.connect("http://localhost:3000");
+// Connect only after authentication, so the JWT can be sent in the handshake
+const socket = io(API_URL, { autoConnect: false });
+
+const formatTime = (date = new Date()) =>
+  new Date(date).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+const systemMessage = (text) => ({ type: "system", text, time: formatTime() });
 
 function App() {
   // Authentication State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showSignUp, setShowSignUp] = useState(false);
-  const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
 
   // User State
   const [username, setUsername] = useState("");
-  const [isUsernameSet, setIsUsernameSet] = useState(false);
+  // Socket listeners are registered once, so they read the username from a ref
+  const usernameRef = useRef("");
 
   // Room State
   const [room, setRoom] = useState("");
@@ -38,104 +48,109 @@ function App() {
     scrollToBottom();
   }, [messages]);
 
+  useEffect(() => {
+    usernameRef.current = username;
+  }, [username]);
+
+  const handleAuth = (userData, authToken) => {
+    setToken(authToken);
+    setUsername(userData.username);
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    socket.disconnect();
+    setIsAuthenticated(false);
+    setIsInRoom(false);
+    setRoom("");
+    setOnlineUsers([]);
+    setMessages([]);
+    setToken(null);
+    setUsername("");
+  }, []);
+
   // Check for existing authentication on mount
   useEffect(() => {
     const storedToken = localStorage.getItem("token");
     const storedUser = localStorage.getItem("user");
 
     if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
-      setUsername(JSON.parse(storedUser).username);
-      setIsAuthenticated(true);
-      setIsUsernameSet(true);
+      try {
+        handleAuth(JSON.parse(storedUser), storedToken);
+      } catch {
+        handleLogout();
+      }
     }
-  }, []);
+  }, [handleLogout]);
 
-  const handleSignUp = (userData, authToken) => {
-    setUser(userData);
-    setToken(authToken);
-    setUsername(userData.username);
-    setIsAuthenticated(true);
-    setIsUsernameSet(true);
-  };
+  // Open the socket connection once authenticated
+  useEffect(() => {
+    if (!token) return;
 
-  const handleSignIn = (userData, authToken) => {
-    setUser(userData);
-    setToken(authToken);
-    setUsername(userData.username);
-    setIsAuthenticated(true);
-    setIsUsernameSet(true);
-  };
+    socket.auth = { token };
+    socket.connect();
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    setIsAuthenticated(false);
-    setIsUsernameSet(false);
-    setUser(null);
-    setToken(null);
-    setUsername("");
-    if (isInRoom) {
-      leaveRoom();
-    }
-  };
+    const onConnectError = (err) => {
+      console.error("Socket connection error:", err.message);
+      // Token expired or invalid - force the user to sign in again
+      if (err.message === "Invalid token") {
+        handleLogout();
+      }
+    };
+    socket.on("connect_error", onConnectError);
+
+    return () => {
+      socket.off("connect_error", onConnectError);
+      socket.disconnect();
+    };
+  }, [token, handleLogout]);
 
   const joinRoom = async () => {
-    if (room !== "") {
-      socket.emit("join_room", { room, username });
-      setIsInRoom(true);
+    const roomName = room.trim();
+    if (roomName === "") return;
 
-      // Load message history from database
-      try {
-        const response = await fetch(
-          `http://localhost:3000/api/messages/${room}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
+    setRoom(roomName);
+    socket.emit("join_room", { room: roomName });
+    setIsInRoom(true);
+    setMessages([systemMessage(`Welcome to room ${roomName}!`)]);
 
-        if (response.ok) {
-          const data = await response.json();
-          const loadedMessages = data.messages.map((msg) => ({
-            type: msg.username === username ? "sent" : "received",
-            text: msg.message,
-            username: msg.username,
-            time: msg.time,
-          }));
-
-          setMessages([
-            {
-              type: "system",
-              text: `Welcome to room ${room}!`,
-              time: new Date().toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-            },
-            ...loadedMessages,
-          ]);
-        }
-      } catch (error) {
-        console.error("Error loading messages:", error);
-        setMessages([
-          {
-            type: "system",
-            text: `Welcome to room ${room}!`,
-            time: new Date().toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
+    // Load message history from database
+    try {
+      const response = await fetch(
+        `${API_URL}/api/messages/${encodeURIComponent(roomName)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
           },
-        ]);
+        }
+      );
+
+      if (response.status === 401) {
+        handleLogout();
+        return;
       }
+
+      if (response.ok) {
+        const data = await response.json();
+        const loadedMessages = data.messages.map((msg) => ({
+          type: msg.username === username ? "sent" : "received",
+          text: msg.message,
+          username: msg.username,
+          time: formatTime(msg.timestamp),
+        }));
+
+        // Keep any live messages that arrived while history was loading
+        setMessages((prev) => [prev[0], ...loadedMessages, ...prev.slice(1)]);
+      }
+    } catch (error) {
+      console.error("Error loading messages:", error);
     }
   };
 
   const leaveRoom = () => {
-    socket.emit("leave_room", { room, username });
+    socket.emit("leave_room");
     setIsInRoom(false);
     setRoom("");
     setOnlineUsers([]);
@@ -144,22 +159,13 @@ function App() {
 
   const sendMessage = (e) => {
     e.preventDefault();
-    if (message.trim() !== "") {
-      const messageData = {
-        message,
-        room,
-        username,
-        time: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      };
-
-      socket.emit("send_message", messageData);
+    const text = message.trim();
+    if (text !== "") {
+      socket.emit("send_message", { message: text });
 
       setMessages((prev) => [
         ...prev,
-        { ...messageData, type: "sent", text: message },
+        { type: "sent", text, username, time: formatTime() },
       ]);
       setMessage("");
     }
@@ -173,24 +179,17 @@ function App() {
           type: "received",
           text: data.message,
           username: data.username,
-          time: data.time,
+          time: formatTime(data.timestamp),
         },
       ]);
     });
 
     socket.on("user_joined", (data) => {
       setOnlineUsers(data.onlineUsers);
-      if (data.username !== username) {
+      if (data.username !== usernameRef.current) {
         setMessages((prev) => [
           ...prev,
-          {
-            type: "system",
-            text: `${data.username} joined the room`,
-            time: new Date().toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-          },
+          systemMessage(`${data.username} joined the room`),
         ]);
       }
     });
@@ -199,14 +198,7 @@ function App() {
       setOnlineUsers(data.onlineUsers);
       setMessages((prev) => [
         ...prev,
-        {
-          type: "system",
-          text: `${data.username} left the room`,
-          time: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        },
+        systemMessage(`${data.username} left the room`),
       ]);
     });
 
@@ -222,14 +214,14 @@ function App() {
     if (showSignUp) {
       return (
         <SignUp
-          onSignUp={handleSignUp}
+          onSignUp={handleAuth}
           onSwitchToSignIn={() => setShowSignUp(false)}
         />
       );
     } else {
       return (
         <SignIn
-          onSignIn={handleSignIn}
+          onSignIn={handleAuth}
           onSwitchToSignUp={() => setShowSignUp(true)}
         />
       );

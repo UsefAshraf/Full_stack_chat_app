@@ -1,414 +1,391 @@
 # 💬 Real-Time Chat Application
 
-A modern, full-stack real-time chat application built with React, Node.js, Socket.IO, and MongoDB. Features include user authentication, message persistence, and online/offline user presence tracking.
+A full-stack, real-time chat application built with **React**, **Node.js / Express**, **Socket.IO** and **MongoDB**. Users sign up, sign in, join chat rooms and exchange messages instantly. Messages are stored in MongoDB and online presence is tracked live.
 
-![Chat Application](https://img.shields.io/badge/React-17.0.2-blue) ![Node.js](https://img.shields.io/badge/Node.js-Express-green) ![Socket.IO](https://img.shields.io/badge/Socket.IO-4.4.1-black) ![MongoDB](https://img.shields.io/badge/MongoDB-Database-brightgreen)
-
-## ✨ Features
-
-### 🔐 Authentication System
-
-- **User Registration**: Sign up with username, email, and password
-- **Secure Login**: JWT-based authentication with bcrypt password hashing
-- **Session Persistence**: Stay logged in across browser refreshes
-- **Token Management**: Automatic token storage and validation
-
-### 💬 Real-Time Messaging
-
-- **Instant Messaging**: Send and receive messages in real-time using Socket.IO
-- **Multiple Rooms**: Join different chat rooms by room number
-- **Message History**: All messages are persisted to MongoDB
-- **Auto-Load History**: Previous messages load automatically when joining a room
-
-### 👥 User Presence Tracking
-
-- **Online Users Sidebar**: See who's currently in the room
-- **User Count**: Real-time count of online users
-- **Join/Leave Notifications**: System messages when users join or leave
-- **Disconnect Handling**: Automatic cleanup when users close their browser
-
-### 🎨 Modern UI/UX
-
-- **Beautiful Design**: Gradient backgrounds and smooth animations
-- **Responsive Layout**: Works on desktop and mobile devices
-- **Message Bubbles**: Distinct styling for sent and received messages
-- **System Messages**: Clear notifications for room events
+![React](https://img.shields.io/badge/React-17-61DAFB?logo=react&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-339933?logo=node.js&logoColor=white)
+![Express](https://img.shields.io/badge/Express-4-000000?logo=express&logoColor=white)
+![Socket.IO](https://img.shields.io/badge/Socket.IO-4-010101?logo=socket.io&logoColor=white)
+![MongoDB](https://img.shields.io/badge/MongoDB-7-47A248?logo=mongodb&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
 ---
 
-## 🚀 Quick Start
+## 📑 Table of Contents
+
+- [Features](#-features)
+- [Tech Stack](#-tech-stack)
+- [Architecture](#-architecture)
+- [Getting Started](#-getting-started)
+- [Environment Variables](#-environment-variables)
+- [Available Scripts](#-available-scripts)
+- [Project Structure](#-project-structure)
+- [REST API](#-rest-api)
+- [Socket.IO Events](#-socketio-events)
+- [Security](#-security)
+- [Troubleshooting](#-troubleshooting)
+- [Roadmap](#-roadmap)
+- [Contributing](#-contributing)
+- [License](#-license)
+
+---
+
+## ✨ Features
+
+**🔐 Authentication**
+- Sign up with username, email and password
+- Passwords hashed with **bcrypt**; sessions use **JWT** (valid for 24h)
+- Session persists across page refreshes; expired tokens log the user out automatically
+
+**💬 Real-time messaging**
+- Instant messaging over WebSockets (Socket.IO)
+- Any number of named chat rooms
+- Messages saved to MongoDB; the latest 100 load when you join a room
+- Times shown in each user's local timezone
+
+**👥 Presence**
+- Live sidebar of users online in the current room
+- Join / leave notifications
+- Automatic cleanup when a user closes the tab or loses connection
+
+**🎨 UI**
+- Gradient design with smooth animations
+- Distinct bubbles for sent and received messages
+- Responsive layout for desktop and mobile
+
+---
+
+## 🔧 Tech Stack
+
+| Layer     | Technology                                                    |
+| --------- | ------------------------------------------------------------- |
+| Frontend  | React 17 (Create React App), Socket.IO Client, CSS3           |
+| Backend   | Node.js, Express 4, Socket.IO 4                               |
+| Database  | MongoDB with Mongoose ODM                                     |
+| Auth      | JSON Web Tokens (`jsonwebtoken`), `bcryptjs`                  |
+| Dev tools | nodemon, Docker Compose (local MongoDB)                       |
+
+---
+
+## 🏗 Architecture
+
+```
+┌────────────────────┐   REST (auth, history)   ┌────────────────────┐        ┌───────────┐
+│   React client     │ ───────────────────────▶ │  Express server    │ ─────▶ │  MongoDB  │
+│ localhost:3000     │ ◀──── WebSocket ───────▶ │  + Socket.IO       │        │  :27017   │
+└────────────────────┘   (JWT in handshake)     │ localhost:3001     │        └───────────┘
+                                                └────────────────────┘
+```
+
+1. The client signs in over REST and gets a JWT.
+2. The client opens a Socket.IO connection and sends the JWT in the handshake. The server verifies it and takes the username from the token, so users cannot impersonate each other.
+3. On joining a room, the client loads that room's history over REST. New messages are saved to MongoDB and broadcast to everyone in the room.
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- **Node.js** (v14 or higher)
-- **MongoDB** (local installation or MongoDB Atlas)
-- **npm** or **yarn**
+- [Node.js](https://nodejs.org/) **18 or newer** (and npm)
+- **MongoDB**, from one of:
+  - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (easiest, a `docker-compose.yml` is included)
+  - A local [MongoDB Community](https://www.mongodb.com/try/download/community) install
+  - A free [MongoDB Atlas](https://www.mongodb.com/atlas) cluster
 
-### Installation
+### 1. Clone the repository
 
-1. **Clone the repository**
+```bash
+git clone https://github.com/UsefAshraf/Full_stack_chat_app.git
+cd Full_stack_chat_app
+```
 
-   ```bash
-   git clone https://github.com/yourusername/chat-application.git
-   cd chat-application
-   ```
+### 2. Start MongoDB
 
-2. **Install server dependencies**
+Using Docker (recommended):
 
-   ```bash
-   cd server
-   npm install
-   ```
+```bash
+docker compose up -d
+```
 
-3. **Install client dependencies**
+This starts MongoDB 7 on `localhost:27017`, with data kept in a Docker volume. If you use a local install or Atlas instead, skip this step and set `MONGODB_URI` in the next step.
 
-   ```bash
-   cd ../client
-   npm install
-   ```
+### 3. Configure and start the server
 
-4. **Configure environment variables**
+```bash
+cd server
+cp .env.example .env      # Windows PowerShell: Copy-Item .env.example .env
+npm install
+npm run dev               # or: npm start
+```
 
-   Create a `.env` file in the `server` directory:
+Open `server/.env` and set `JWT_SECRET` to a long random string. One way to generate one:
 
-   ```env
-   MONGODB_URI=mongodb://localhost:27017/chatapp
-   JWT_SECRET=your_secure_jwt_secret_key
-   PORT=3000
-   ```
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
 
-5. **Start MongoDB**
+You should see:
 
-   ```bash
-   mongod --dbpath C:\data\db
-   ```
+```
+SERVER IS RUNNING ON PORT 3001
+MongoDB Connected Successfully
+```
 
-   Or use MongoDB Atlas and update the `MONGODB_URI` in `.env`
+### 4. Configure and start the client
 
-6. **Start the backend server**
+In a **second terminal**:
 
-   ```bash
-   cd server
-   npm start
-   ```
+```bash
+cd client
+cp .env.example .env      # optional, the defaults work out of the box
+npm install
+npm start
+```
 
-   Server will run on `http://localhost:3000`
+### 5. Open the app
 
-7. **Start the frontend**
+Go to **http://localhost:3000**, create an account, and join a room such as `general`.
+To test real-time chat, open a second browser window (or an incognito window) and sign in as another user.
 
-   ```bash
-   cd client
-   npm start
-   ```
+---
 
-   Client will run on `http://localhost:3002`
+## 🔑 Environment Variables
 
-8. **Open your browser**
+### `server/.env`
 
-   Navigate to `http://localhost:3002`
+| Variable      | Required | Default                 | Description                                  |
+| ------------- | :------: | ----------------------- | -------------------------------------------- |
+| `MONGODB_URI` |    ✅    | —                       | MongoDB connection string                    |
+| `JWT_SECRET`  |    ✅    | —                       | Secret used to sign and verify JWTs          |
+| `PORT`        |          | `3001`                  | Port for the API and Socket.IO server        |
+| `CLIENT_URL`  |          | `http://localhost:3000` | Allowed CORS origin (URL of the React app)   |
+
+The server will not start if a required variable is missing.
+
+### `client/.env`
+
+| Variable            | Default                 | Description                         |
+| ------------------- | ----------------------- | ----------------------------------- |
+| `REACT_APP_API_URL` | `http://localhost:3001` | Base URL of the backend server      |
+
+> `.env` files are gitignored. Only the `.env.example` templates are committed.
+
+---
+
+## 📜 Available Scripts
+
+| Location  | Command         | Description                                      |
+| --------- | --------------- | ------------------------------------------------ |
+| `server/` | `npm start`     | Start the server with Node                       |
+| `server/` | `npm run dev`   | Start the server with nodemon (restarts on changes) |
+| `client/` | `npm start`     | Start the React dev server on port 3000          |
+| `client/` | `npm run build` | Create an optimized production build in `build/` |
+| `client/` | `npm test`      | Run the client test runner                       |
+| root      | `docker compose up -d` / `down` | Start / stop the MongoDB container |
 
 ---
 
 ## 📁 Project Structure
 
 ```
-chat-application/
-├── client/                    # React frontend
+Full_stack_chat_app/
+├── docker-compose.yml          # Local MongoDB container
+├── client/                     # React frontend
 │   ├── public/
 │   ├── src/
-│   │   ├── components/       # React components
-│   │   │   ├── SignUp.js    # Registration component
-│   │   │   ├── SignIn.js    # Login component
-│   │   │   └── Auth.css     # Auth styling
-│   │   ├── App.js           # Main app component
-│   │   ├── App.css          # Main styling
-│   │   └── index.js         # Entry point
+│   │   ├── components/
+│   │   │   ├── SignIn.js       # Login form
+│   │   │   ├── SignUp.js       # Registration form
+│   │   │   └── Auth.css        # Auth screen styles
+│   │   ├── App.js              # Room selection, chat UI, socket logic
+│   │   ├── App.css             # Chat styles
+│   │   ├── config.js           # API URL configuration
+│   │   └── index.js            # Entry point
+│   ├── .env.example
 │   └── package.json
 │
-└── server/                    # Node.js backend
-    ├── config/
-    │   └── db.js             # MongoDB connection
+└── server/                     # Node.js backend
+    ├── config/db.js            # MongoDB connection
+    ├── middleware/auth.js      # JWT verification for REST routes
     ├── models/
-    │   ├── User.js           # User schema
-    │   └── Message.js        # Message schema
+    │   ├── User.js             # User schema (with password hashing)
+    │   └── Message.js          # Message schema (indexed by room + time)
     ├── routes/
-    │   ├── auth.js           # Authentication routes
-    │   └── messages.js       # Message routes
-    ├── middleware/
-    │   └── auth.js           # JWT middleware
-    ├── index.js              # Server entry point
-    ├── .env                  # Environment variables
+    │   ├── auth.js             # /api/auth/signup, /api/auth/signin
+    │   └── messages.js         # /api/messages
+    ├── index.js                # Express + Socket.IO server
+    ├── .env.example
     └── package.json
 ```
 
 ---
 
-## 🔧 Tech Stack
+## 📡 REST API
 
-### Frontend
+Base URL: `http://localhost:3001`
 
-- **React** - UI library
-- **Socket.IO Client** - Real-time communication
-- **CSS3** - Modern styling with animations
+| Method | Endpoint             | Auth | Description                          |
+| ------ | -------------------- | :--: | ------------------------------------ |
+| GET    | `/api/health`        |      | Health check, returns `{ "status": "ok" }` |
+| POST   | `/api/auth/signup`   |      | Register a new user                  |
+| POST   | `/api/auth/signin`   |      | Log in and receive a JWT             |
+| GET    | `/api/messages/:room`|  ✅  | Latest 100 messages in a room        |
+| POST   | `/api/messages`      |  ✅  | Save a message (REST alternative to sockets) |
 
-### Backend
+Authenticated routes need the header `Authorization: Bearer <token>`.
 
-- **Node.js** - Runtime environment
-- **Express** - Web framework
-- **Socket.IO** - WebSocket library
-- **MongoDB** - NoSQL database
-- **Mongoose** - MongoDB ODM
-- **JWT** - Authentication tokens
-- **bcryptjs** - Password hashing
-
----
-
-## 📡 API Endpoints
-
-### Authentication
-
-#### Sign Up
+<details>
+<summary><b>POST /api/auth/signup</b></summary>
 
 ```http
 POST /api/auth/signup
 Content-Type: application/json
 
-{
-  "username": "john_doe",
-  "email": "john@example.com",
-  "password": "password123"
-}
+{ "username": "john_doe", "email": "john@example.com", "password": "password123" }
 ```
 
-**Response:**
+`201 Created`
 
 ```json
 {
   "message": "User created successfully",
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": {
-    "id": "507f1f77bcf86cd799439011",
-    "username": "john_doe",
-    "email": "john@example.com"
-  }
+  "user": { "id": "507f1f77bcf86cd799439011", "username": "john_doe", "email": "john@example.com" }
 }
 ```
 
-#### Sign In
+Errors: `400` for missing fields, a password under 6 characters, or an email/username that is already taken.
+</details>
+
+<details>
+<summary><b>POST /api/auth/signin</b></summary>
 
 ```http
 POST /api/auth/signin
 Content-Type: application/json
 
-{
-  "email": "john@example.com",
-  "password": "password123"
-}
+{ "email": "john@example.com", "password": "password123" }
 ```
 
-**Response:**
+`200 OK`: same shape as signup, with `"message": "Login successful"`.
+Errors: `400` for missing fields, `401` for invalid credentials.
+</details>
 
-```json
-{
-  "message": "Login successful",
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": {
-    "id": "507f1f77bcf86cd799439011",
-    "username": "john_doe",
-    "email": "john@example.com"
-  }
-}
-```
-
-### Messages
-
-#### Get Room Messages
+<details>
+<summary><b>GET /api/messages/:room</b></summary>
 
 ```http
-GET /api/messages/:room
+GET /api/messages/general
 Authorization: Bearer <token>
 ```
 
-**Response:**
+`200 OK`
 
 ```json
 {
   "messages": [
-    {
-      "username": "john_doe",
-      "message": "Hello everyone!",
-      "time": "10:30 AM",
-      "timestamp": "2024-12-14T08:30:00.000Z"
-    }
+    { "username": "john_doe", "message": "Hello everyone!", "timestamp": "2026-10-30T08:30:00.000Z" }
   ]
 }
 ```
+
+Errors: `401` if the token is missing, invalid or expired.
+</details>
 
 ---
 
 ## 🔌 Socket.IO Events
 
+The client must connect with a valid JWT:
+
+```js
+io("http://localhost:3001", { auth: { token } });
+```
+
+Connections without a valid token are rejected with `"Authentication required"` or `"Invalid token"`. The sender's username always comes from the token, never from the event payload.
+
 ### Client → Server
 
-| Event          | Data                                | Description       |
-| -------------- | ----------------------------------- | ----------------- |
-| `join_room`    | `{ room, username }`                | Join a chat room  |
-| `send_message` | `{ room, username, message, time }` | Send a message    |
-| `leave_room`   | `{ room, username }`                | Leave a chat room |
+| Event          | Payload       | Description                                   |
+| -------------- | ------------- | --------------------------------------------- |
+| `join_room`    | `{ room }`    | Join a room (leaves the previous room, if any) |
+| `send_message` | `{ message }` | Send a message to the current room            |
+| `leave_room`   | —             | Leave the current room                        |
 
 ### Server → Client
 
-| Event             | Data                          | Description           |
-| ----------------- | ----------------------------- | --------------------- |
-| `receive_message` | `{ message, username, time }` | Receive a new message |
-| `user_joined`     | `{ username, onlineUsers }`   | User joined the room  |
-| `user_left`       | `{ username, onlineUsers }`   | User left the room    |
+| Event             | Payload                                   | Description                    |
+| ----------------- | ----------------------------------------- | ------------------------------ |
+| `receive_message` | `{ room, username, message, timestamp }`  | New message from another user  |
+| `user_joined`     | `{ username, onlineUsers }`               | A user joined the room         |
+| `user_left`       | `{ username, onlineUsers }`               | A user left or disconnected    |
 
 ---
 
-## 🎯 Usage
+## 🔒 Security
 
-1. **Sign Up**: Create a new account with username, email, and password
-2. **Sign In**: Log in with your credentials
-3. **Join Room**: Enter a room number (e.g., "room1", "33", etc.)
-4. **Chat**: Send messages and see them appear in real-time
-5. **See Online Users**: View who's currently in the room in the sidebar
-6. **Message History**: Refresh the page and see all previous messages
-7. **Leave Room**: Click "Leave Room" to exit the chat
+- Passwords hashed with bcrypt (10 salt rounds) and never returned by the API
+- JWT authentication on both protected REST routes and the Socket.IO handshake
+- Message author comes from the verified token, which prevents impersonation
+- CORS restricted to the configured `CLIENT_URL`
+- Server-side validation of sign-up input and message content
+- Secrets come from environment variables and are never committed
 
----
-
-## 🛠️ Development
-
-### Running in Development Mode
-
-**Backend (with nodemon):**
-
-```bash
-cd server
-npm run start  # Uses nodemon for auto-restart
-```
-
-**Frontend:**
-
-```bash
-cd client
-npm start
-```
-
-### Building for Production
-
-```bash
-cd client
-npm run build
-```
+> **Production note:** use a strong `JWT_SECRET`, serve over HTTPS, and consider adding rate limiting (e.g. `express-rate-limit`) to the auth routes.
 
 ---
 
 ## 🐛 Troubleshooting
 
-### MongoDB Connection Error
-
-- Ensure MongoDB is running: `mongod --dbpath C:\data\db`
-- Check the `MONGODB_URI` in `.env`
-- For MongoDB Atlas, use the connection string provided
-
-### Port Already in Use
-
-- Kill existing Node processes: `Get-Process -Name node | Stop-Process -Force`
-- Change the port in `server/.env`
-
-### Authentication Errors
-
-- Clear browser localStorage
-- Check JWT_SECRET is set in `.env`
-- Verify token is being sent in Authorization header
+| Problem | Solution |
+| ------- | -------- |
+| `Missing required environment variables` | Create `server/.env` from `server/.env.example`. |
+| `MongoDB Connection Error` | Make sure MongoDB is running (`docker compose ps`) and `MONGODB_URI` is correct. For Atlas, add your IP to the network access list. |
+| `EADDRINUSE` / port already in use | Another process is using port 3000 or 3001. Stop it, or change `PORT` (server) and `REACT_APP_API_URL` / `CLIENT_URL` to match. |
+| CORS error in the browser console | `CLIENT_URL` in `server/.env` must exactly match the URL the client runs on. |
+| Sent back to the sign-in screen | Your token expired (24h). Sign in again. |
+| Changes to `client/.env` have no effect | Restart `npm start`, because CRA reads env variables only at startup. |
 
 ---
 
-## 📝 Environment Variables
+## 🗺 Roadmap
 
-| Variable      | Description               | Example                             |
-| ------------- | ------------------------- | ----------------------------------- |
-| `MONGODB_URI` | MongoDB connection string | `mongodb://localhost:27017/chatapp` |
-| `JWT_SECRET`  | Secret key for JWT tokens | `your_secure_secret_key`            |
-| `PORT`        | Server port number        | `3000`                              |
-
----
-
-## 🔒 Security Features
-
-- **Password Hashing**: Bcrypt with salt rounds
-- **JWT Authentication**: Secure token-based auth
-- **Protected Routes**: Middleware validation
-- **Input Validation**: Server-side validation
-- **CORS Configuration**: Controlled origins
+- [ ] Private (direct) messages
+- [ ] Typing indicators
+- [ ] File and image sharing
+- [ ] Message reactions and emoji picker
+- [ ] User profiles and avatars
+- [ ] Dark mode
+- [ ] Message search
+- [ ] Automated tests and CI
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome!
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Commit your changes: `git commit -m "Add amazing feature"`
+4. Push the branch: `git push origin feature/amazing-feature`
 5. Open a Pull Request
+
+Please open an issue first to discuss major changes.
 
 ---
 
 ## 📄 License
 
-This project is licensed under the MIT License.
+This project is licensed under the [MIT License](LICENSE).
 
 ---
 
 ## 👨‍💻 Author
 
-**Your Name**
+**Yousef Ashraf Abdelmoez**
 
-- GitHub: [@yourusername](https://github.com/yourusername)
-- LinkedIn: [Your Name](https://linkedin.com/in/yourprofile)
+- GitHub: [@UsefAshraf](https://github.com/UsefAshraf)
 
----
-
-## 🙏 Acknowledgments
-
-- Socket.IO for real-time communication
-- MongoDB for data persistence
-- React for the amazing UI library
-- The open-source community
-
----
-
-## 📸 Screenshots
-
-### Sign In Page
-
-Beautiful gradient design with modern authentication
-
-### Chat Interface
-
-Real-time messaging with online users sidebar
-
-### Message History
-
-All messages persisted and loaded automatically
-
----
-
-## 🚀 Future Enhancements
-
-- [ ] Private messaging between users
-- [ ] File sharing and image uploads
-- [ ] Typing indicators
-- [ ] Message reactions and emojis
-- [ ] User profiles with avatars
-- [ ] Push notifications
-- [ ] Message search functionality
-- [ ] Dark mode theme
-
----
-
-**⭐ If you like this project, please give it a star on GitHub!**
+⭐ If you find this project useful, please give it a star!
